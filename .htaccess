@@ -1,0 +1,8 @@
+# Disable directory browsing
+Options -Indexes
+
+# Protect critical files
+<FilesMatch "^\.env|db_connect\.php">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
