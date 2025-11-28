@@ -1,0 +1,406 @@
+/* --- General Reset and Layout --- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #f4f7f6;
+    color: #333;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* --- Navigation Bar --- */
+.user-navbar {
+    background-color: #007bff; /* Primary Blue */
+    color: white;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.user-navbar .logo {
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.user-navbar nav ul {
+    list-style: none;
+    display: flex;
+}
+
+.user-navbar nav ul li {
+    margin-left: 20px;
+}
+
+.user-navbar nav ul li a {
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.user-navbar nav ul li a:hover {
+    background-color: #0056b3;
+}
+
+.user-navbar nav ul li a i {
+    margin-right: 5px;
+}
+
+/* --- Main Content --- */
+.user-content {
+    flex-grow: 1;
+    padding: 30px 0;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* --- Footer --- */
+.user-footer {
+    background-color: #343a40;
+    color: #f8f9fa;
+    text-align: center;
+    padding: 15px 0;
+    font-size: 0.9em;
+}
+
+/* --- Card and Form Styling (Reused from Admin) --- */
+.card {
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    margin-bottom: 20px;
+}
+
+.card h2 {
+    border-bottom: 2px solid #ecf0f1;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    color: #34495e;
+    font-size: 1.3em;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #555;
+}
+
+.form-group input[type="text"],
+.form-group input[type="email"],
+.form-group input[type="password"],
+.form-group select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1em;
+    transition: border-color 0.3s;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #007bff;
+    outline: none;
+}
+
+/* --- Buttons --- */
+.btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    transition: background-color 0.3s, opacity 0.3s;
+}
+
+.btn-primary {
+    background-color: #007bff; /* Blue */
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+}
+
+.btn-secondary {
+    background-color: #6c757d; /* Gray */
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #5a6268;
+}
+
+.btn-danger {
+    background-color: #dc3545; /* Red */
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c82333;
+}
+
+.btn-warning {
+    background-color: #ffc107; /* Yellow */
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+}
+
+.btn-lg {
+    padding: 12px 25px;
+    font-size: 1.1em;
+}
+
+/* --- Alerts --- */
+.alert {
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* --- Dashboard Specific --- */
+.dashboard-grid-user {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+@media (min-width: 992px) {
+    .dashboard-grid-user {
+        grid-template-columns: 1fr 2fr; /* Profile on left, 2 columns for others */
+    }
+    .profile-card {
+        grid-row: span 3; /* Profile takes up three rows on large screens */
+    }
+}
+
+.total-fine {
+    font-size: 1.2em;
+    margin-bottom: 15px;
+}
+
+.text-danger {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+.text-success {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.text-muted {
+    color: #6c757d;
+}
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.data-table th, .data-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ecf0f1;
+}
+
+.data-table th {
+    background-color: #f8f9fa;
+    font-weight: 700;
+    color: #555;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+.data-table tr:hover {
+    background-color: #fcfcfc;
+}
+
+.data-table .badge {
+    padding: 5px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+.badge-success { background-color: #28a745; color: white; }
+.badge-danger { background-color: #dc3545; color: white; }
+.badge-warning { background-color: #ffc107; color: #212529; }
+.badge-info { background-color: #17a2b8; color: white; }
+
+.table-danger-row {
+    background-color: #f8d7da !important;
+}
+
+/* --- Search Page Specific --- */
+.search-form-user {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.search-form-user input[type="text"] {
+    flex-grow: 1;
+}
+
+.book-list-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 20px;
+}
+
+.book-item {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 5px solid #007bff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+    transition: transform 0.2s;
+}
+
+.book-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+}
+
+.book-details {
+    margin-bottom: 15px;
+}
+
+.book-status {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px dashed #eee;
+}
+
+.book-status .btn {
+    margin-left: auto;
+}
+
+.book-item h3 {
+    color: #007bff;
+    margin-top: 0;
+    font-size: 1.2em;
+}
+
+.book-item p {
+    margin: 5px 0;
+    font-size: 0.9em;
+}
+
+/* Removed as part of the previous edit */
+
+.availability-status {
+    margin-bottom: 10px !important;
+    font-weight: 600;
+}
+
+/* --- Welcome Page --- */
+.welcome-container {
+    text-align: center;
+    padding: 50px 0;
+}
+
+.welcome-card {
+    max-width: 800px;
+    margin: 0 auto;
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.welcome-card h1 {
+    color: #007bff;
+    margin-bottom: 10px;
+}
+
+.welcome-card .lead {
+    font-size: 1.1em;
+    color: #6c757d;
+    margin-bottom: 30px;
+}
+
+.button-group a {
+    margin: 0 10px;
+}
+
+.info-section {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.info-section h2 {
+    color: #343a40;
+    margin-bottom: 15px;
+}
+
+.info-section ul {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+}
+
+.info-section ul li a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.info-section ul li a:hover {
+    text-decoration: underline;
+}
