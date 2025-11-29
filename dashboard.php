@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/functions.php';
 require_member_login();
+
 global $conn;
 
 $member_id = $_SESSION['member_id'];
@@ -11,6 +12,12 @@ $stmt = $conn->prepare("SELECT * FROM tbl_members WHERE member_id = ?");
 $stmt->bind_param("i", $member_id);
 $stmt->execute();
 $member_details = $stmt->get_result()->fetch_assoc();
+
+// --- Fetch Institution Details for ID Card ---
+$inst_name = get_setting($conn, 'institution_name') ?? 'Institution';
+$inst_logo = get_setting($conn, 'institution_logo');
+// Adjust logo path for frontend display
+$card_logo_path = (!empty($inst_logo) && file_exists($inst_logo)) ? $inst_logo : '';
 
 // --- Handle Profile Update/Password Change ---
 $message = '';
@@ -156,6 +163,11 @@ $full_bg_logo_path = (!empty($bg_logo_path) && file_exists($bg_logo_path)) ? $bg
 ?>
 
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
     /* UPDATED ROOT FOR HIGH CONTRAST */
@@ -306,7 +318,7 @@ $full_bg_logo_path = (!empty($bg_logo_path) && file_exists($bg_logo_path)) ? $bg
         border-radius: 20px;
         padding: 30px;
         box-shadow: 0 8px 15px rgba(0,0,0,0.2); /* Darker shadow */
-        height: 100%;
+        height: 85%;
         display: flex;
         flex-direction: column;
     }
@@ -407,6 +419,154 @@ $full_bg_logo_path = (!empty($bg_logo_path) && file_exists($bg_logo_path)) ? $bg
     }
     .btn-submit:hover { transform: translateY(-2px); }
 
+    /* --- MEMBERSHIP CARD WIDGET STYLES --- */
+    .membership-widget {
+        background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
+        border-radius: 15px;
+        padding: 20px;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+        border: 1px solid rgba(255,255,255,0.3);
+        cursor: pointer;
+        transition: transform 0.3s;
+    }
+    .membership-widget:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 20px rgba(0,0,0,0.15);
+    }
+    .widget-icon {
+        font-size: 2.5rem;
+        background: rgba(255,255,255,0.2);
+        width: 60px; height: 60px;
+        border-radius: 50%;
+        display: flex; justify-content: center; align-items: center;
+    }
+    .widget-text h3 { margin: 0; font-size: 1.2rem; font-weight: 700; }
+    .widget-text p { margin: 5px 0 0; opacity: 0.9; font-size: 0.9rem; }
+
+    /* --- MODAL STYLES --- */
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+        z-index: 2000; display: none; justify-content: center; align-items: center;
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    .modal-box {
+        background: white; width: 90%; max-width: 450px;
+        border-radius: 20px; padding: 30px;
+        text-align: center;
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+        transform: scale(0.95);
+        animation: popUp 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+        color: var(--text-dark);
+    }
+
+    @keyframes popUp { to { transform: scale(1); } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal-header h3 { margin: 0 0 15px; color: var(--primary); font-size: 1.5rem; }
+    .detail-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.95rem; border-bottom: 1px dashed #e5e7eb; padding-bottom: 5px; }
+    .detail-label { color: var(--text-light); font-weight: 600; }
+    .detail-val { color: var(--text-dark); font-weight: 700; }
+
+    .radio-group { display: flex; gap: 15px; margin: 20px 0; justify-content: center; }
+    .radio-option { 
+        border: 1px solid #e5e7eb; padding: 10px 15px; border-radius: 10px; 
+        cursor: pointer; transition: 0.2s; flex: 1; display: flex; align-items: center; gap: 5px; justify-content: center;
+        font-weight: 600; color: var(--text-light);
+    }
+    .radio-option:hover { background: #f8fafc; }
+    .radio-option input { accent-color: var(--primary); }
+    .radio-option.selected { border-color: var(--primary); background: #e0e7ff; color: var(--primary); }
+
+    /* --- ID CARD PREVIEW STYLES (PORTRAIT) --- */
+    #cardPreviewModal .modal-box { max-width: 400px; width: 95%; }
+    
+    .id-card-container {
+        width: 100%;
+        max-width: 320px; /* Narrow width for portrait */
+        margin: 0 auto;
+        aspect-ratio: 54 / 85.6; /* Portrait Aspect Ratio */
+        position: relative;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        /* Ensure high quality render */
+        -webkit-font-smoothing: antialiased;
+    }
+    
+    .id-card-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        z-index: 2;
+        background: #fff;
+    }
+    
+    .card-top-stripe {
+        height: 8px; width: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+    }
+
+    .card-header-section {
+        padding: 20px 15px 10px;
+        display: flex;
+        flex-direction: column; /* Stack logo and name vertically */
+        align-items: center;
+        gap: 10px;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: center;
+    }
+    
+    .card-logo { width: 60px; height: 60px; object-fit: contain; margin-bottom: 5px; }
+    
+    .card-inst-info { text-align: center; line-height: 1.2; }
+    .card-inst-name { font-size: 15px; font-weight: 800; color: var(--text-dark); text-transform: uppercase; }
+    .card-type-badge { 
+        font-size: 10px; color: var(--white); background: var(--primary); 
+        padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; 
+        display: inline-block; margin-top: 5px;
+    }
+
+    .card-body-section {
+        flex-grow: 1;
+        padding: 20px 15px;
+        display: flex;
+        flex-direction: column; /* Vertical Stack */
+        justify-content: center;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .card-member-details { text-align: center; }
+    .card-name { font-size: 18px; font-weight: 800; color: var(--text-dark); margin-bottom: 5px; line-height: 1.2; }
+    .card-dept { font-size: 13px; color: var(--text-light); font-weight: 600; }
+    .card-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; margin-top: 10px; display: block; font-weight: 700;}
+    .card-uid-main { font-family: 'Courier New', monospace; font-size: 14px; font-weight: 700; color: var(--primary); background: #f1f5f9; padding: 2px 6px; border-radius: 4px;}
+
+    .card-code-section {
+        text-align: center;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        margin-bottom: 10px;
+    }
+    #codeTarget img, #codeTarget canvas { max-width: 120px; max-height: 120px; }
+    .code-uid-sub { font-size: 10px; font-family: monospace; color: #64748b; margin-top: 4px; }
+
+    .card-watermark {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        opacity: 0.05; z-index: 1; width: 60%;
+    }
+
+    /* Download buttons */
+    .download-actions { display: flex; gap: 10px; margin-top: 25px; flex-wrap: wrap; justify-content: center; }
 
     /* --- NEW TABBED INTERFACE STYLES (for right card) --- */
     .data-tabs {
@@ -566,71 +726,83 @@ $full_bg_logo_path = (!empty($bg_logo_path) && file_exists($bg_logo_path)) ? $bg
 
     <div class="content-grid">
         
-        <div class="dash-card">
-            <div class="card-header">
-                <h2><i class="fas fa-user-cog" style="color: var(--primary);"></i> Account Settings</h2>
-            </div>
-
-            <?php if ($message): ?>
-                <div class="alert-box alert-<?php echo $msg_type; ?>" style="background: <?php echo $msg_type == 'success' ? '#d1fae5' : '#fee2e2'; ?>; color: <?php echo $msg_type == 'success' ? '#065f46' : '#991b1b'; ?>; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                    <i class="fas <?php echo $msg_type == 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'; ?>"></i>
-                    <?php echo $message; ?>
+        <div class="left-column">
+            <div class="membership-widget" onclick="openConfigModal()">
+                <div class="widget-text">
+                    <h3>My Membership Card</h3>
+                    <p>View or download your digital library ID</p>
                 </div>
-            <?php endif; ?>
-
-            <div class="profile-tabs">
-                <button class="tab-btn active" onclick="switchTab('details')"><i class="fas fa-id-card-alt"></i> Profile Details</button>
-                <button class="tab-btn" onclick="switchTab('password')"><i class="fas fa-lock"></i> Security</button>
+                <div class="widget-icon">
+                    <i class="fas fa-id-card"></i>
+                </div>
             </div>
 
-            <div id="tab-details" class="tab-content">
-                <form method="POST">
-                    <input type="hidden" name="action" value="update_profile">
-                    
-                    <div class="form-field-group">
-                        <label class="form-label">Member ID</label>
-                        <input type="text" class="form-control" value="<?php echo htmlspecialchars($member_details['member_uid']); ?>" disabled style="background: #eef1f5; color: #adb5bd;">
+            <div class="dash-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-user-cog" style="color: var(--primary);"></i> Account Settings</h2>
+                </div>
+
+                <?php if ($message): ?>
+                    <div class="alert-box alert-<?php echo $msg_type; ?>" style="background: <?php echo $msg_type == 'success' ? '#d1fae5' : '#fee2e2'; ?>; color: <?php echo $msg_type == 'success' ? '#065f46' : '#991b1b'; ?>; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                        <i class="fas <?php echo $msg_type == 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'; ?>"></i>
+                        <?php echo $message; ?>
                     </div>
+                <?php endif; ?>
 
-                    <div class="form-field-group">
-                        <label class="form-label">Full Name</label>
-                        <input type="text" name="full_name" class="form-control" value="<?php echo htmlspecialchars($member_details['full_name']); ?>" required>
-                    </div>
+                <div class="profile-tabs">
+                    <button class="tab-btn active" onclick="switchTab('details')"><i class="fas fa-id-card-alt"></i> Profile Details</button>
+                    <button class="tab-btn" onclick="switchTab('password')"><i class="fas fa-lock"></i> Security</button>
+                </div>
 
-                    <div class="form-field-group">
-                        <label class="form-label">Email Address</label>
-                        <input type="email" name="email" class="form-control" value="<?php echo htmlspecialchars($member_details['email']); ?>">
-                    </div>
+                <div id="tab-details" class="tab-content">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="update_profile">
+                        
+                        <div class="form-field-group">
+                            <label class="form-label">Member ID</label>
+                            <input type="text" class="form-control" value="<?php echo htmlspecialchars($member_details['member_uid']); ?>" disabled style="background: #eef1f5; color: #adb5bd;">
+                        </div>
 
-                    <div class="form-field-group">
-                        <label class="form-label">Department</label>
-                        <input type="text" name="department" class="form-control" value="<?php echo htmlspecialchars($member_details['department']); ?>" required>
-                    </div>
+                        <div class="form-field-group">
+                            <label class="form-label">Full Name</label>
+                            <input type="text" name="full_name" class="form-control" value="<?php echo htmlspecialchars($member_details['full_name']); ?>" required>
+                        </div>
 
-                    <button type="submit" class="btn-submit btn-blue">
-                        <i class="fas fa-save"></i> Save Profile
-                    </button>
-                </form>
-            </div>
+                        <div class="form-field-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" name="email" class="form-control" value="<?php echo htmlspecialchars($member_details['email']); ?>">
+                        </div>
 
-            <div id="tab-password" class="tab-content" style="display: none;">
-                <form method="POST">
-                    <input type="hidden" name="action" value="change_password">
-                    
-                    <div class="form-field-group">
-                        <label class="form-label">New Password</label>
-                        <input type="password" name="new_password" class="form-control" placeholder="Min 6 characters" required>
-                    </div>
+                        <div class="form-field-group">
+                            <label class="form-label">Department</label>
+                            <input type="text" name="department" class="form-control" value="<?php echo htmlspecialchars($member_details['department']); ?>" required>
+                        </div>
 
-                    <div class="form-field-group">
-                        <label class="form-label">Confirm Password</label>
-                        <input type="password" name="confirm_password" class="form-control" placeholder="Re-enter password" required>
-                    </div>
+                        <button type="submit" class="btn-submit btn-blue">
+                            <i class="fas fa-save"></i> Save Profile
+                        </button>
+                    </form>
+                </div>
 
-                    <button type="submit" class="btn-submit btn-red">
-                        <i class="fas fa-exchange-alt"></i> Change Password
-                    </button>
-                </form>
+                <div id="tab-password" class="tab-content" style="display: none;">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="change_password">
+                        
+                        <div class="form-field-group">
+                            <label class="form-label">New Password</label>
+                            <input type="password" name="new_password" class="form-control" placeholder="Min 6 characters" required>
+                        </div>
+
+                        <div class="form-field-group">
+                            <label class="form-label">Confirm Password</label>
+                            <input type="password" name="confirm_password" class="form-control" placeholder="Re-enter password" required>
+                        </div>
+
+                        <button type="submit" class="btn-submit btn-red">
+                            <i class="fas fa-exchange-alt"></i> Change Password
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
 
@@ -741,6 +913,97 @@ $full_bg_logo_path = (!empty($bg_logo_path) && file_exists($bg_logo_path)) ? $bg
     </div>
 </div>
 
+<div id="configModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>Membership Details</h3>
+        </div>
+        
+        <div class="detail-row"><span class="detail-label">Name:</span> <span class="detail-val"><?php echo htmlspecialchars($member_details['full_name']); ?></span></div>
+        <div class="detail-row"><span class="detail-label">ID:</span> <span class="detail-val"><?php echo htmlspecialchars($member_details['member_uid']); ?></span></div>
+        <div class="detail-row"><span class="detail-label">Department:</span> <span class="detail-val"><?php echo htmlspecialchars($member_details['department']); ?></span></div>
+        
+        <div style="margin-top: 25px; text-align: left;">
+            <label style="font-weight: 600; color: var(--text-light); font-size: 0.9rem;">Select ID Code Type:</label>
+            <div class="radio-group">
+                <label class="radio-option selected" onclick="selectCodeType(this, 'qrcode')">
+                    <input type="radio" name="codeType" value="qrcode" checked hidden> 
+                    <i class="fas fa-qrcode"></i> QR Code
+                </label>
+                <label class="radio-option" onclick="selectCodeType(this, 'barcode')">
+                    <input type="radio" name="codeType" value="barcode" hidden> 
+                    <i class="fas fa-barcode"></i> Barcode
+                </label>
+            </div>
+        </div>
+        
+        <div class="modal-actions">
+            <button class="btn-submit" style="background: #f3f4f6; color: #4b5563; width: auto; padding: 12px 25px; margin-top: 10px;" onclick="closeConfigModal()">Close</button>
+            <button class="btn-submit btn-blue" style="width: auto; padding: 12px 25px; margin-top: 10px;" onclick="openCardPreview()">View Membership</button>
+        </div>
+    </div>
+</div>
+
+<div id="cardPreviewModal" class="modal-overlay">
+    <div class="modal-box">
+        <button class="btn-submit" style="background: #e5e7eb; color: #4b5563; box-shadow: none; width: auto;" onclick="closeCardPreview()">Close</button>
+        <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+            <h3 style="font-size: 1.3rem;">Your Library Card</h3>
+        </div>
+        
+        <div style="padding: 20px 0;">
+            <div id="idCardPreview" class="id-card-container">
+                <div class="id-card-content">
+                    <div class="card-top-stripe"></div>
+                    
+                    <div class="card-header-section">
+                        <?php if(!empty($card_logo_path)): ?>
+                            <img src="<?php echo $card_logo_path; ?>" alt="Logo" class="card-logo">
+                        <?php else: ?>
+                            <div style="width: 60px; height: 60px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: var(--primary); margin-bottom: 5px;">
+                                <i class="fas fa-book-open"></i>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="card-inst-info">
+                            <div class="card-inst-name"><?php echo htmlspecialchars($inst_name); ?></div>
+                            <div class="card-type-badge">Library Card</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-body-section">
+                        
+                        <div class="card-code-section">
+                            <div id="codeTarget"></div>
+                        </div>
+
+                        <div class="card-member-details">
+                            <div class="card-name"><?php echo htmlspecialchars($member_details['full_name']); ?></div>
+                            <div class="card-dept"><?php echo htmlspecialchars($member_details['department']); ?></div>
+                            <span class="card-label">Member ID</span>
+                            <span class="card-uid-main"><?php echo htmlspecialchars($member_details['member_uid']); ?></span>
+                        </div>
+                    </div>
+
+                    <?php if(!empty($card_logo_path)): ?>
+                        <img src="<?php echo $card_logo_path; ?>" class="card-watermark">
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="download-actions">
+            <button class="btn-submit" style="background: #059669; box-shadow: 0 4px 10px rgba(5, 150, 105, 0.3);" onclick="downloadCard('image')">
+                <i class="fas fa-image"></i> Download Image
+            </button>
+            <button class="btn-submit" style="background: #b91c1c; box-shadow: 0 4px 10px rgba(185, 28, 28, 0.3);" onclick="downloadCard('pdf')">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </button>
+            
+        </div>
+    </div>
+</div>
+
 <script>
     function switchTab(tabName) {
         // Hide all tab content
@@ -776,6 +1039,95 @@ $full_bg_logo_path = (!empty($bg_logo_path) && file_exists($bg_logo_path)) ? $bg
         // Activate default Data tab
         document.querySelector('.data-tab-btn').click();
     });
+
+    // --- MEMBERSHIP CARD LOGIC ---
+    let selectedCodeType = 'qrcode';
+    const memberUID = "<?php echo htmlspecialchars($member_details['member_uid']); ?>";
+
+    function openConfigModal() {
+        document.getElementById('configModal').style.display = 'flex';
+    }
+
+    function closeConfigModal() {
+        document.getElementById('configModal').style.display = 'none';
+    }
+
+    function selectCodeType(element, type) {
+        document.querySelectorAll('.radio-option').forEach(opt => opt.classList.remove('selected'));
+        element.classList.add('selected');
+        element.querySelector('input').checked = true;
+        selectedCodeType = type;
+    }
+
+    function openCardPreview() {
+        closeConfigModal();
+        document.getElementById('cardPreviewModal').style.display = 'flex';
+        generateCardCode();
+    }
+
+    function closeCardPreview() {
+        document.getElementById('cardPreviewModal').style.display = 'none';
+    }
+
+    function generateCardCode() {
+        const container = document.getElementById('codeTarget');
+        container.innerHTML = ''; // Clear previous
+
+        if (selectedCodeType === 'qrcode') {
+            new QRCode(container, {
+                text: memberUID,
+                width: 100,
+                height: 100,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        } else {
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            container.appendChild(svg);
+            JsBarcode(svg, memberUID, {
+                format: "CODE128",
+                lineColor: "#000",
+                width: 1.5,
+                height: 50,
+                displayValue: false,
+                margin: 0
+            });
+        }
+    }
+
+    function downloadCard(format) {
+        const element = document.getElementById('idCardPreview');
+        
+        // Use html2canvas to capture the div
+        html2canvas(element, {
+            scale: 4, // Higher scale for better quality
+            useCORS: true, // Allow loading cross-origin images if setup correctly
+            logging: false,
+            backgroundColor: null
+        }).then(canvas => {
+            if (format === 'image') {
+                // Download as PNG
+                const link = document.createElement('a');
+                link.download = 'Library_Card_' + memberUID + '.png';
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+            } else {
+                // Download as PDF
+                // PORTRAIT FORMAT: 54mm width, 85.6mm height
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: [54, 85.6]
+                });
+                
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
+                pdf.addImage(imgData, 'JPEG', 0, 0, 54, 85.6);
+                pdf.save('Library_Card_' + memberUID + '.pdf');
+            }
+        });
+    }
 </script>
 
 <?php
