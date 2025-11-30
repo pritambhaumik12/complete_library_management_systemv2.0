@@ -1,6 +1,7 @@
 <?php
 require_once '../includes/functions.php';
 require_admin_login();
+
 global $conn;
 
 $message = '';
@@ -192,11 +193,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($library_id == 0) {
             $error = "Library assignment is required.";
         } else {
-            // Updated INSERT query with is_downloadable
+            // Insert Book
             $stmt = $conn->prepare("INSERT INTO tbl_books (title, author, edition, publication, soft_copy_path, is_online_available, isbn, category, total_quantity, available_quantity, shelf_location, library_id, content_type_id, security_control, is_downloadable, price, cover_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             
-            // Added 'i' to types string for is_downloadable
-            $stmt->bind_param("sssssisssissisids", $title, $author, $edition, $publication, $final_soft_copy, $is_online_available, $isbn, $category, $final_quantity, $final_quantity, $shelf_location, $library_id, $content_type_id, $security_control, $is_downloadable, $price, $cover_image_path);
+            // Updated types string for correct data mapping
+            // sssssisssiisiisds
+            $stmt->bind_param("sssssisssiisiisds", $title, $author, $edition, $publication, $final_soft_copy, $is_online_available, $isbn, $category, $final_quantity, $final_quantity, $shelf_location, $library_id, $content_type_id, $security_control, $is_downloadable, $price, $cover_image_path);
             
             if ($stmt->execute()) {
                 $book_id = $conn->insert_id;
@@ -340,8 +342,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Updated UPDATE query with is_downloadable
             $stmt = $conn->prepare("UPDATE tbl_books SET title = ?, author = ?, edition = ?, publication = ?, soft_copy_path = ?, is_online_available = ?, isbn = ?, category = ?, shelf_location = ?, total_quantity = ?, available_quantity = ?, content_type_id = ?, security_control = ?, is_downloadable = ?, price = ?, cover_image = ? WHERE book_id = ?");
             
-            // Added 'i' to types string
-            $stmt->bind_param("sssssisssissisidi", $title, $author, $edition, $publication, $final_soft_copy_path, $is_online_available, $isbn, $category, $shelf_location, $final_quantity, $new_available_quantity, $content_type_id, $security_control, $is_downloadable, $price, $final_cover_path, $book_id);
+            // Corrected type string: sssssisssiiisisdi
+            // 13th 's' matches security_control string
+            // 15th 'd' matches price decimal
+            // 16th 's' matches cover_image string
+            $stmt->bind_param("sssssisssiiisisdi", $title, $author, $edition, $publication, $final_soft_copy_path, $is_online_available, $isbn, $category, $shelf_location, $final_quantity, $new_available_quantity, $content_type_id, $security_control, $is_downloadable, $price, $final_cover_path, $book_id);
             
             if ($stmt->execute()) {
                 $message = "Book details updated successfully.";
