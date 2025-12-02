@@ -4,6 +4,52 @@ require_admin_login();
 
 global $conn;
 
+// --- 0. FILE PROXY HANDLER (Bypass .htaccess for Admins) ---
+if (isset($_GET['view_book'])) {
+    $book_id = (int)$_GET['view_book'];
+    $stmt = $conn->prepare("SELECT soft_copy_path, title FROM tbl_books WHERE book_id = ?");
+    $stmt->bind_param("i", $book_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    
+    if ($row = $res->fetch_assoc()) {
+        $path = $row['soft_copy_path'];
+        
+        // Handle External Links (Direct Redirect)
+        if (strpos($path, 'http') === 0) {
+            header("Location: $path");
+            exit;
+        }
+
+        // Handle Local Files
+        // Note: 'uploads/books/' is in the parent directory relative to 'admin/'
+        $file_path = '../' . $path; 
+        
+        if (file_exists($file_path)) {
+            // Determine MIME type
+            $ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+            $ctype = 'application/octet-stream'; // Default
+            if ($ext == 'pdf') $ctype = 'application/pdf';
+            elseif ($ext == 'epub') $ctype = 'application/epub+zip';
+            
+            // Serve File
+            header('Content-Type: ' . $ctype);
+            header('Content-Disposition: inline; filename="' . basename($file_path) . '"');
+            header('Content-Length: ' . filesize($file_path));
+            header('Cache-Control: private, max-age=0, must-revalidate');
+            header('Pragma: public');
+            readfile($file_path);
+            exit;
+        } else {
+            die("Error: File not found on server.");
+        }
+    } else {
+        die("Error: Book record not found.");
+    }
+}
+
+// --- Standard Page Logic Starts Here ---
+
 $message = '';
 $error = '';
 
@@ -142,7 +188,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $security_control = $_POST['security_control'] ?? 'No';
         
         // --- NEW: Downloadable Logic ---
-        // Only allow downloadable if security is 'No'.
         $is_downloadable = (int)($_POST['is_downloadable'] ?? 0);
         if ($security_control === 'Yes') {
             $is_downloadable = 0;
@@ -174,8 +219,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($book_type === 'Physical') {
             $final_quantity = $quantity_physical;
             $is_online_available = 0;
-            $final_soft_copy = ''; // Clear path if physical only
-            $is_downloadable = 0; // Logic reset for physical
+            $final_soft_copy = ''; 
+            $is_downloadable = 0; 
         } elseif ($book_type === 'Both') {
             $final_quantity = $quantity_physical;
             $is_online_available = !empty($final_soft_copy) ? 1 : 0;
@@ -193,11 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($library_id == 0) {
             $error = "Library assignment is required.";
         } else {
-            // Insert Book
             $stmt = $conn->prepare("INSERT INTO tbl_books (title, author, edition, publication, soft_copy_path, is_online_available, isbn, category, total_quantity, available_quantity, shelf_location, library_id, content_type_id, security_control, is_downloadable, price, cover_image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            
-            // Updated types string for correct data mapping
-            // sssssisssiisiisds
             $stmt->bind_param("sssssisssiisiisds", $title, $author, $edition, $publication, $final_soft_copy, $is_online_available, $isbn, $category, $final_quantity, $final_quantity, $shelf_location, $library_id, $content_type_id, $security_control, $is_downloadable, $price, $cover_image_path);
             
             if ($stmt->execute()) {
@@ -258,7 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $title = trim($_POST['title'] ?? '');
         $author = trim($_POST['author'] ?? '');
         
-        // --- Handle Book Source (Upload vs URL vs Keep) ---
+        // --- Handle Book Source ---
         $ebook_method = $_POST['ebook_method'] ?? 'keep';
         $uploaded_path = null;
 
@@ -307,8 +348,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $current_cover = $current_book_data['cover_image'] ?? '';
         
         $final_cover_path = ($new_cover_path !== null) ? $new_cover_path : $current_cover;
-        
-        // Determine final soft copy path
         $final_soft_copy_path = ($ebook_method === 'keep') ? $current_soft_copy_path : $uploaded_path;
         
         $is_online_available = 0;
@@ -321,7 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $final_quantity = $quantity_physical;
             $is_online_available = 0;
             $final_soft_copy_path = '';
-            $is_downloadable = 0; // Reset
+            $is_downloadable = 0; 
         } elseif ($book_type === 'Both') {
             $final_quantity = $quantity_physical;
             $is_online_available = !empty($final_soft_copy_path) ? 1 : 0;
@@ -339,13 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $quantity_diff = $final_quantity - $current_book_data['total_quantity'];
             $new_available_quantity = max(0, $current_book_data['available_quantity'] + $quantity_diff);
             
-            // Updated UPDATE query with is_downloadable
             $stmt = $conn->prepare("UPDATE tbl_books SET title = ?, author = ?, edition = ?, publication = ?, soft_copy_path = ?, is_online_available = ?, isbn = ?, category = ?, shelf_location = ?, total_quantity = ?, available_quantity = ?, content_type_id = ?, security_control = ?, is_downloadable = ?, price = ?, cover_image = ? WHERE book_id = ?");
-            
-            // Corrected type string: sssssisssiiisisdi
-            // 13th 's' matches security_control string
-            // 15th 'd' matches price decimal
-            // 16th 's' matches cover_image string
             $stmt->bind_param("sssssisssiiisisdi", $title, $author, $edition, $publication, $final_soft_copy_path, $is_online_available, $isbn, $category, $shelf_location, $final_quantity, $new_available_quantity, $content_type_id, $security_control, $is_downloadable, $price, $final_cover_path, $book_id);
             
             if ($stmt->execute()) {
@@ -431,7 +464,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // --- Fetch Books for View/Search ---
 $search_query = trim($_GET['search'] ?? '');
-// Added is_downloadable to selection
 $sql = "SELECT b.*, l.library_name, c.type_name 
         FROM tbl_books b 
         LEFT JOIN tbl_libraries l ON b.library_id = l.library_id 
@@ -950,9 +982,11 @@ admin_header('Book Management');
                             <td><?php echo ($book['total_quantity'] > 0) ? htmlspecialchars($book['shelf_location']) : '<span style="color: #9ca3af;">N/A</span>'; ?></td>
                             <td>
                                 <?php if (!empty($book['soft_copy_path'])): 
-                                    $link = htmlspecialchars($book['soft_copy_path']);
-                                    // Check if it's a remote link or local file
-                                    $href = (strpos($link, 'http') === 0) ? $link : '../' . $link;
+                                    $path = $book['soft_copy_path'];
+                                    $is_external = (strpos($path, 'http') === 0);
+                                    
+                                    // If external, use directly. If local, use the proxy handler.
+                                    $href = $is_external ? htmlspecialchars($path) : 'books.php?view_book=' . $book['book_id'];
                                     $target = "_blank";
                                 ?>
                                     <a href="<?php echo $href; ?>" target="<?php echo $target; ?>" class="btn-view"><i class="fas fa-eye"></i> Read</a>
@@ -1638,8 +1672,6 @@ document.addEventListener('DOMContentLoaded', function() {
         editFileInput.addEventListener('change', function() {
             const currentFilePath = document.getElementById('currentFilePath');
             if (this.files.length > 0) {
-                // currentFilePath.textContent = 'New file selected';
-                // currentFilePath.style.color = '#059669'; 
                 document.getElementById('editUploadMessage').style.color = '#111827';
                 
                 // Show preview
