@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/functions.php';
 require_member_login();
+
 global $conn;
 
 $member_id = $_SESSION['member_id'];
@@ -294,7 +295,7 @@ if ($stmt_check->get_result()->num_rows === 0) {
                         <div class="icon-box icon-dont"><i class="fas fa-copy"></i></div>
                         <div class="rule-text">
                             <h4>Don't: Attempt to Copy</h4>
-                            <p>Right-click, text selection, and printing (Ctrl+P) are disabled.</p>
+                            <p>Right-click, text selection, printing, and all developer tools are disabled.</p>
                         </div>
                     </li>
                 </ul>
@@ -562,14 +563,40 @@ if ($stmt_check->get_result()->num_rows === 0) {
             if (e.key === 'Meta' || e.key === 'OS') metaPressed = true;
             if (e.key === 'Shift') shiftPressed = true;
 
-            // 1. Detect Shift + Win + S
+            // 1. Detect Shift + Win + S (Screenshot)
             if (metaPressed && shiftPressed && (e.key.toLowerCase() === 's' || e.code === 'KeyS')) {
                 e.preventDefault();
                 triggerSecurityBreach();
             }
 
-            // 2. Disable Standard Shortcuts
-            if ((e.ctrlKey || e.metaKey) && (['p', 's', 'c', 'u'].includes(e.key.toLowerCase()))) {
+            // 2. Block All Functional Keys (F1 - F12)
+            // keyCode 112 is F1, 123 is F12
+            if (e.keyCode >= 112 && e.keyCode <= 123) {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Also check by key name just in case
+            if (e.key.startsWith('F') && !isNaN(e.key.substring(1))) {
+                e.preventDefault();
+                return false;
+            }
+
+            // 3. Block Inspect Element / Developer Tools
+            // Ctrl+Shift+I (DevTools)
+            // Ctrl+Shift+J (Console)
+            // Ctrl+Shift+C (Element Inspector)
+            // Ctrl+U (View Source)
+            if (
+                (e.ctrlKey && e.shiftKey && (['I', 'J', 'C', 'K','U'].includes(e.key.toUpperCase()))) || 
+                (e.ctrlKey && e.key.toLowerCase() === 'u')
+            ) {
+                e.preventDefault();
+                return false;
+            }
+
+            // 4. Disable Standard Shortcuts (Print, Save, Copy)
+            if ((e.ctrlKey || e.metaKey) && (['p', 's', 'c','u'].includes(e.key.toLowerCase()))) {
                 e.preventDefault();
             }
 
@@ -580,7 +607,7 @@ if ($stmt_check->get_result()->num_rows === 0) {
             if (e.key === 'Meta' || e.key === 'OS') metaPressed = false;
             if (e.key === 'Shift') shiftPressed = false;
             
-            // 3. Detect Print Screen Key
+            // 5. Detect Print Screen Key
             if (e.key === 'PrintScreen') {
                 navigator.clipboard.writeText(''); 
                 triggerSecurityBreach();
