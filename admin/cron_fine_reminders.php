@@ -22,7 +22,7 @@ function write_log($message) {
 
 write_log("--- Starting Fine Reminder Process ---");
 
-// 3. Fix Include Paths (CRITICAL FIX)
+// 3. Fix Include Paths
 // Switch context to 'includes' directory so functions.php loads PHPMailer correctly
 $current_dir = getcwd();
 $includes_dir = dirname(__DIR__) . '/includes';
@@ -60,6 +60,7 @@ if (!$conn || $conn->connect_error) {
 
 // --- Fetch Settings ---
 $currency = get_setting($conn, 'currency_symbol') ?? '';
+$inst_init = get_setting($conn, 'institution_initials') ?: 'INS'; // Fetch Institution Initials
 
 // --- Helper: Generate Fine Email Card ---
 function generate_fine_email_card($data, $currency) {
@@ -69,7 +70,11 @@ function generate_fine_email_card($data, $currency) {
     
     $formatted_amount = $currency . ' ' . number_format($data['fine_amount'], 2);
     $library_name = htmlspecialchars($data['library_name'] ?? 'The Central Library');
+    
+    // 'created_at' alias from query maps to 'fine_date'
     $fine_date = date('d M Y', strtotime($data['created_at']));
+    
+    // 'remarks' alias from query maps to 'fine_type'
     $remarks = !empty($data['remarks']) ? htmlspecialchars($data['remarks']) : 'Overdue Books / General Fine';
 
     $html = "
@@ -88,7 +93,7 @@ function generate_fine_email_card($data, $currency) {
             <table style='width: 100%; border-collapse: collapse; font-size: 14px;'>
                 <tr>
                     <td style='padding: 8px 0; color: #64748b; width: 40%;'><strong>Fine Reference ID:</strong></td>
-                    <td style='padding: 8px 0; color: #334155; font-family: monospace; font-size: 15px;'>" . htmlspecialchars($data['fine_uid']) . "</td>
+                    <td style='padding: 8px 0; color: #334155; font-family: monospace; font-size: 15px;'>" . htmlspecialchars($data['fine_id']) . "</td>
                 </tr>
                 <tr>
                     <td style='padding: 8px 0; color: #64748b;'><strong>Reason (Remarks):</strong></td>
@@ -115,17 +120,28 @@ function generate_fine_email_card($data, $currency) {
 }
 
 // --- Fetch Unpaid Fines ---
-// We join with tbl_libraries to get the name of the library where the fine was created
-// We assume tbl_fines has library_id, or we fallback to user's library if null
+// Joined with tables to correctly fetch library name and used Aliases to match PHP variables
 write_log("Fetching unpaid fines...");
 
-$sql = "SELECT tf.fine_uid, tf.fine_amount, tf.remarks, tf.created_at, 
-               tm.full_name, tm.email, 
-               tl.library_name 
+$sql = "SELECT 
+            tf.fine_id, 
+            tf.fine_amount, 
+            tf.fine_type AS remarks,       -- Alias 'fine_type' to 'remarks'
+            tf.fine_date AS created_at,    -- Alias 'fine_date' to 'created_at'
+            tm.full_name, 
+            tm.email, 
+            COALESCE(tl.library_name, 'Central Library') AS library_name,
+            COALESCE(tl.library_initials, 'LIB') AS library_initials
         FROM tbl_fines tf 
         JOIN tbl_members tm ON tf.member_id = tm.member_id 
-        LEFT JOIN tbl_libraries tl ON tf.library_id = tl.library_id 
-        WHERE tf.status = 'Unpaid' AND tm.email IS NOT NULL AND tm.email != ''";
+        -- Join tables to reach Library ID via Circulation -> Copy -> Book
+        LEFT JOIN tbl_circulation tc ON tf.circulation_id = tc.circulation_id
+        LEFT JOIN tbl_book_copies tbc ON tc.copy_id = tbc.copy_id
+        LEFT JOIN tbl_books tb ON tbc.book_id = tb.book_id
+        LEFT JOIN tbl_libraries tl ON tb.library_id = tl.library_id 
+        WHERE tf.payment_status = 'Pending' -- Use correct column and status
+          AND tm.email IS NOT NULL 
+          AND tm.email != ''";
 
 $stmt = $conn->prepare($sql);
 
@@ -135,9 +151,15 @@ if ($stmt) {
     
     $count = 0;
     while($row = $res->fetch_assoc()) {
-        $subject = "Outstanding Fine Notice: " . $row['fine_uid'];
+        // Generate Formatted Fine ID
+        $formatted_id = strtoupper($inst_init . '/' . $row['library_initials'] . '/FINE/' . $row['fine_id']);
+        
+        // Update row data to use formatted ID for the email body
+        $row['fine_id'] = $formatted_id;
+        
+        $subject = "Outstanding Fine Notice: " . $formatted_id;
         $body = generate_fine_email_card($row, $currency);
-        $lib_name = $row['library_name']; // Pass to wrapper for header branding
+        $lib_name = $row['library_name'];
         
         write_log("Sending fine notice to: " . $row['email']);
         
