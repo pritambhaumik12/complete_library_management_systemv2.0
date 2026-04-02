@@ -852,7 +852,7 @@ function send_system_email($to_email, $member_name, $subject, $body, $library_na
         $mail->Port       = 587;
 
         // Recipients
-        $mail->setFrom('lms.librario@gmail.com', $final_library_name . ' System');
+        $mail->setFrom('example@gmail.com', $final_library_name . ' System');
         $mail->addAddress($to_email, $member_name);
 
         // Embed Logo
